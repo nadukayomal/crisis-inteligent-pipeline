@@ -1,0 +1,30 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = []
+
+[project]
+name = "crisis-intelligence-pipeline"
+version = "1.0.0"
+description = "Build an LLM-powered pipeline that turns a chaotic flood of crisis data into actionable intelligence for Sri Lanka's Disaster Management Center (DMC)"
+requires-python = ">=3.11"
+
+dependencies = [
+    "python-dotenv>=1.0.0",
+    "pydantic>=2.5.0",
+    "jsonschema>=4.20.0",
+    "pyyaml>=6.0.1",
+    "tqdm>=4.66.0",
+    "pandas>=2.1.0",
+    "jupyter>=1.0.0",
+    "tiktoken>=0.5.2",
+    "openai>=1.12.0",
+    "google-genai>=1.0.0",
+    "groq>=0.4.0",
+    "llama-index-core>=0.10.0",
+    "langchain>=0.1.0",
+    "langchain-openai>=0.0.5",
+    "langchain-google-genai>=0.0.6",
+]
