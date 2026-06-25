@@ -1,7 +1,8 @@
+from decimal import Overflow
 import os
 import time
 import random
-from openai import OpenAI, OpenAIError
+from openai import OpenAI, OpenAIError, api_key
 from google import genai
 from google.genai import types
 from groq import Groq
@@ -50,4 +51,89 @@ class LLMClient:
 
         self._init_client()
 
-    
+    def _init_client(self):
+        """ Initialize provider to specific cient """
+
+        if self.provider == "openai":
+            api_key = os.getenv("OPENAI_APT_KEY")
+            if not api_key:
+                raise ValueError("OPENAI_KEY not found in environment")
+            self.client = OpenAI(api_key = api_key)
+
+        elif self.provider == "google":
+            api_key = os.getenv("GEMINI_API_KEY")
+            if not api_key:
+                raise ValueError("GEMINI_API_KEY is not found in environment")
+            self.client = genai.Client(api_key = api_key)
+
+        elif self.provider == "groq":
+            api_key = os.getenv("GROQ_API_KEY")
+            if not api_key:
+                raise ValueError("GROQ_API_KEY is not found in environment")
+            self.Client = Groq(api_key=api_key)
+
+        else:
+            raise ValueError(f"Unsupported provider : {self.provider}")
+
+    def _calculate_backoff(self, attempt):
+        """Calculate exponential backoff with jitter."""
+
+        base_wait = self.backoff_base * (2 ** attempt)
+        jitter = random.uniform(0, self.backoff_jitter * base_wait)
+        return base_wait + jitter
+
+    def _is_retryable_error(self, error):
+        """Check if error is transient and should be retried."""
+        
+        error_str = str(error).lower()
+
+        # Rate limits (429)
+        if "429" in error_str or "rate limit" in error_str:
+            return True
+
+        # Server errors (5xx)
+        if any(x in error_str for x in ["500", "502", "503", "504", "server error"]):
+            return True
+
+        # Timeouts
+        if "timeout" in error_str or "timed out" in error_str:
+            return True
+
+        # Context overflow (may be handled differently)
+        if "context" in error_str and ("length" in error_str or "too long" in error_str):
+            return True
+
+        return False
+
+    def chat(self, message, context_strs, temperature, max_tokens, **kwargs):
+        """
+        Send chat completion request with automatic retry and token management.
+
+        Args:
+            messages: OpenAI-style messages array
+            context_strs: Optional context strings (counted separately)
+            temperature: Sampling temperature
+            max_tokens: Max completion tokens
+            **kwargs: Additional provider-specific parameters
+
+        Returns:
+            Dict with text, usage (estimated + actual), latency_ms, meta
+        """
+
+        token_counts = count_messages_tokens(message, self.provider, self.model, context_strs)
+        overflow_handled = False
+
+        if self.hard_prompt_cap and token_counts["estimated_total"] > self.hard_prompt_cap:
+            messages, context_strs, fit_meta = fit_within_context(
+                                                                    messages,
+                                                                    self.provider,
+                                                                    self.model,
+                                                                    self.hard_prompt_cap,
+                                                                    strategy="truncate",
+                                                                    context_strs=context_strs,
+                                                                )
+            overflow_handled = fit_meta.get("overflow", False)
+            token_counts = count_messages_tokens(messages, self.provider, self.model, context_strs)
+
+
+            ## Need to continue from here LM clien line 176
